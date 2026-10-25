@@ -112,7 +112,7 @@ details summary{cursor:pointer;color:var(--acc);margin:8px 0}
         <option value="">更多…</option>
         <option value="export">导出加密备份</option>
         <option value="importv">导入备份（合并）</option>
-        <option value="csv">导入 CSV</option>
+        <option value="csv">导入 CSV / 合并核验状态表</option>
         <option value="csvout">导出明文 CSV</option>
         <option value="print">打印应急纸卡</option>
         <option value="settings">同步与设备设置</option>
@@ -122,7 +122,7 @@ details summary{cursor:pointer;color:var(--acc);margin:8px 0}
 
     <div id="bulkCard" class="card hidden">
       <h2>批量粘贴</h2>
-      <p class="mute">一行一个。支持购号常见格式 <code>邮箱----密码----辅助邮箱</code>，也支持用 Tab、|、空格、逗号分隔。能识别出邮箱、密码、辅助邮箱、手机号、2FA 密钥，其余放进备注。已存在的邮箱自动跳过。</p>
+      <p class="mute">一行一个。支持购号常见格式 <code>邮箱----密码----辅助邮箱</code>，也支持用 Tab、|、空格、逗号分隔。能识别出邮箱、密码、辅助邮箱、手机号、2FA 密钥，其余放进备注。已存在的邮箱只补空白项，不覆盖原有密码。</p>
       <textarea id="bulkText" style="min-height:120px"></textarea>
       <div class="row" style="margin-top:8px">
         <div style="width:160px"><label>归属端</label><select id="bulkEp"></select></div>
@@ -278,10 +278,10 @@ function parseCSV(text) {
   if (f || row.length) { row.push(f); rows.push(row); }
   return rows.filter(r => r.some(x => x.trim()));
 }
-const FIELDS = ["email", "password", "provider", "recovery", "phone", "totp", "endpoint", "services", "status", "cost", "renew", "notes"];
+const FIELDS = ["email", "password", "provider", "recovery", "phone", "totp", "endpoint", "services", "status", "cost", "renew", "notes", "checkedAt"];
 const HEAD_ALIAS = { "邮箱": "email", "邮箱地址": "email", "账号": "email", "密码": "password", "服务商": "provider",
   "辅助邮箱": "recovery", "手机": "phone", "绑定手机": "phone", "2fa": "totp", "端": "endpoint", "归属端": "endpoint",
-  "服务": "services", "绑定服务": "services", "用途": "services", "状态": "status", "费用": "cost", "续费日": "renew", "备注": "notes" };
+  "服务": "services", "绑定服务": "services", "用途": "services", "状态": "status", "费用": "cost", "续费日": "renew", "备注": "notes", "核验时间": "checkedAt", "最后核验": "checkedAt" };
 function csvToEntries(text) {
   const rows = parseCSV(text.replace(/^﻿/, "")); if (!rows.length) return [];
   const head = rows[0].map(h => { h = h.trim().toLowerCase(); return HEAD_ALIAS[h] || (FIELDS.includes(h) ? h : null); });
@@ -319,6 +319,28 @@ function parseBulk(text) {
     out.push(e);
   }
   return out;
+}
+
+// 导入：新邮箱新增；已有邮箱只更新文件里非空的列（用于合并外部核验结果，如 Cursor 的邮箱状态表）。
+// 密码和 2FA 只补空、不覆盖，状态表里本来也不该有这两列
+function applyImport(d, rows, device, extra = {}, now = new Date().toISOString()) {
+  const byEmail = new Map(live(d).map(e => [e.email.toLowerCase(), e]));
+  let added = 0, updated = 0, same = 0;
+  for (const r0 of rows) {
+    const r = { ...extra, ...r0 }, e = byEmail.get(r.email.toLowerCase());
+    if (!e) {
+      const n = { id: uuid(), provider: providerOf(r.email)[0], status: "正常", ...r, createdAt: now, updatedAt: now, pwChangedAt: now, updatedBy: device };
+      d.entries.push(n); byEmail.set(r.email.toLowerCase(), n); added++; continue;
+    }
+    let changed = false;
+    for (const [k, v] of Object.entries(r)) {
+      if (k === "email" || !v || e[k] === v) continue;
+      if ((k === "password" || k === "totp") && e[k]) continue;
+      e[k] = v; changed = true;
+    }
+    if (changed) { e.updatedAt = now; e.updatedBy = device; updated++; } else same++;
+  }
+  return { added, updated, same };
 }
 
 // 合并：按 id，较新的 updatedAt 胜出；删除留墓碑 90 天，避免别的设备把已删记录同步回来
@@ -365,6 +387,10 @@ function audit(d, now = Date.now()) {
         if (!seenPair.has(key)) { seenPair.add(key); add("warn", `${e.email} 和 ${r.email} 互为辅助邮箱，丢一个可能两个都找不回`, [e.id, r.id]); }
       }
     }
+    if (e.checkedAt) {
+      const ago = Math.floor((now - new Date(e.checkedAt).getTime()) / 864e5);
+      if (ago > 30) add("info", `${e.email} 上次实际核验是 ${ago} 天前`, [e.id]);
+    }
     if (e.renew) {
       const days = Math.floor((new Date(e.renew + "T00:00:00").getTime() - now) / 864e5);
       if (days < 0) add("warn", `${e.email}（${e.cost || e.services || "付费权益"}）续费日已过 ${-days} 天`, [e.id]);
@@ -410,7 +436,7 @@ async function syncVault(local, pw, c, device, f = fetch) {
   throw new Error("同步时多台设备同时在改，稍后自动重试");
 }
 if (typeof module !== "undefined") module.exports = { sealVault, openVault, totp, base32Decode, genPassword, providerOf,
-  csvToEntries, entriesToCSV, parseBulk, mergeVaults, sameEntries, audit, syncVault, live, endpointsOf, parseEndpoints };
+  csvToEntries, entriesToCSV, parseBulk, applyImport, mergeVaults, sameEntries, audit, syncVault, live, endpointsOf, parseEndpoints };
 </script>
 
 <script>
@@ -572,6 +598,7 @@ function render() {
         ${e.cost || e.renew ? `<div class="meta">${esc(e.cost)} ${e.renew ? "续费日 " + esc(e.renew) : ""}</div>` : ""}
         ${e.notes ? `<div class="meta">${esc(e.notes).replace(/\n/g, "<br>")}</div>` : ""}
         ${e.totp ? `<div class="meta">2FA：<span class="totp" data-totp="${e.id}">······</span></div>` : ""}
+        ${e.checkedAt ? `<div class="meta">实际核验：${esc(String(e.checkedAt).slice(0, 10))}</div>` : ""}
         <div class="meta">最后修改：${esc(e.updatedBy || "—")} ${e.updatedAt ? new Date(e.updatedAt).toLocaleString() : ""}</div>
       </div>
       <div class="acts">
@@ -641,15 +668,9 @@ $("delBtn").onclick = async () => {
 };
 
 // --- 批量导入 ---
-function addMany(rows, extra = {}) {
-  const known = new Set(live(data).map(x => x.email.toLowerCase())); let n = 0, skip = 0;
-  const t = nowISO();
-  for (const r of rows) {
-    if (known.has(r.email.toLowerCase())) { skip++; continue; }
-    data.entries.push({ id: uuid(), provider: providerOf(r.email)[0], status: "正常", ...extra, ...r, createdAt: t, updatedAt: t, pwChangedAt: t, updatedBy: device() });
-    known.add(r.email.toLowerCase()); n++;
-  }
-  return `导入 ${n} 条` + (skip ? `，跳过已存在 ${skip} 条` : "");
+function addMany(rows, extra = {}, by = device()) {
+  const r = applyImport(data, rows, by, extra);
+  return `新增 ${r.added} 条，更新 ${r.updated} 条` + (r.same ? `，${r.same} 条无变化` : "");
 }
 $("bulkBtn").onclick = () => { $("bulkCard").classList.remove("hidden"); $("bulkEp").value = filterEp || ""; $("bulkText").focus(); };
 $("bulkCancel").onclick = () => { $("bulkCard").classList.add("hidden"); $("bulkText").value = ""; };
@@ -688,7 +709,7 @@ $("fileIn").onchange = async () => {
     try { data = mergeVaults(data, await openVault(blob, pw)); await persist(); toast("备份已合并"); } catch (e) { toast(e.message === "主密码不对" ? "这个备份用的是另一个主密码" : e.message); }
   } else {
     const rows = csvToEntries(text); if (!rows.length) return toast("文件里没有识别到邮箱");
-    const msg = addMany(rows); await persist(); toast(msg);
+    const msg = addMany(rows, {}, f.name.includes("mailbox-status") ? "Cursor 核验" : device()); await persist(); toast(msg);
   }
 };
 
