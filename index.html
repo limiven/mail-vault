@@ -1,0 +1,740 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#2563eb">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<title>邮箱资产保险库</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1d2330;--mute:#6b7280;--line:#e3e6eb;--acc:#2563eb;--warn:#b91c1c;--ok:#15803d;--note:#a16207}
+@media (prefers-color-scheme:dark){:root{--bg:#14171c;--card:#1d2128;--fg:#e6e8ec;--mute:#9aa1ad;--line:#2c313a;--acc:#60a5fa;--warn:#f87171;--ok:#4ade80;--note:#facc15}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,"Microsoft YaHei",sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:8px 0 12px}
+h2{font-size:16px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:12px}
+input,textarea,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
+textarea{min-height:70px;resize:vertical}
+button{padding:7px 12px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);font:inherit;cursor:pointer}
+button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+button.danger{color:var(--warn)}
+button.chip{padding:2px 10px;border-radius:14px;font-size:13px}
+button.chip.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+label{font-size:13px;color:var(--mute);display:block;margin-bottom:2px}
+.mute{color:var(--mute);font-size:13px}
+.hidden{display:none!important}
+.banner{padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:14px;border:1px solid var(--line);background:var(--card)}
+.banner.warn{border-color:var(--warn);color:var(--warn)}
+.banner.ok{color:var(--ok)}
+.entry{display:grid;grid-template-columns:1fr auto;gap:6px 12px;border-top:1px solid var(--line);padding:10px 0}
+.entry:first-child{border-top:0}
+.entry .addr{font-weight:600;word-break:break-all}
+.entry .meta{font-size:13px;color:var(--mute);word-break:break-all}
+.entry .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:start}
+.entry .acts button{padding:4px 8px;font-size:13px}
+.entry.flag{box-shadow:inset 3px 0 0 var(--warn);padding-left:8px}
+.totp{font-family:ui-monospace,Consolas,monospace;font-size:15px;color:var(--ok)}
+.tag{display:inline-block;font-size:12px;padding:0 6px;border:1px solid var(--line);border-radius:10px;margin:0 4px 2px 0}
+.tag.bad{color:var(--warn);border-color:var(--warn)}
+.issue{font-size:14px;padding:4px 0}
+.issue.warn::before{content:"● ";color:var(--warn)}
+.issue.info::before{content:"● ";color:var(--note)}
+details summary{cursor:pointer;color:var(--acc);margin:8px 0}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+#toast.on{opacity:.92}
+#printArea{display:none}
+@media (max-width:600px){.entry{grid-template-columns:1fr}.entry .acts{justify-content:flex-start}}
+@media print{
+  body{background:#fff;color:#000}
+  .wrap,#toast{display:none!important}
+  #printArea{display:block;font-size:12px}
+  #printArea table{width:100%;border-collapse:collapse}
+  #printArea th,#printArea td{border:1px solid #999;padding:4px 6px;text-align:left;word-break:break-all}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>邮箱资产保险库 <span class="mute">· 项目全局 · 端到端加密</span></h1>
+
+  <!-- 解锁 -->
+  <div id="lockView" class="card">
+    <p id="lockHint" class="mute"></p>
+    <label>主密码（全项目同一个）</label>
+    <input id="master" type="password" autocomplete="off">
+    <div id="master2Box" class="hidden" style="margin-top:8px">
+      <label>再输一次主密码（首次创建）</label>
+      <input id="master2" type="password" autocomplete="off">
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="unlockBtn" class="pri">解锁</button>
+      <button id="importVaultBtn">从备份文件打开</button>
+    </div>
+    <details id="connectBox">
+      <summary>这台设备第一次用：接入项目全局保险库</summary>
+      <div class="grid">
+        <div><label>GitHub 仓库（所有者/仓库名，建议私有）</label><input id="c_repo" placeholder="用户名/仓库名"></div>
+        <div><label>文件路径</label><input id="c_path" value="mail-vault/vault.json"></div>
+        <div><label>分支</label><input id="c_branch" value="main"></div>
+        <div><label>访问令牌（只授权这一个仓库的 Contents 读写）</label><input id="c_token" type="password" autocomplete="off"></div>
+        <div><label>这台设备叫什么（用于记录谁改的）</label><input id="c_device" placeholder="办公电脑 / 我的手机"></div>
+      </div>
+      <div class="row" style="margin-top:10px"><button id="connectBtn" class="pri">连接并解锁</button>
+        <span class="mute">远端还没有保险库时，会用上面的主密码新建（需输两次）。</span></div>
+    </details>
+    <p class="mute">主密码只在本设备解密用，不上传。仓库里存的、令牌能读到的，都只是密文。忘了主密码无法恢复，可以写在纸上保管。</p>
+  </div>
+
+  <!-- 主界面 -->
+  <div id="mainView" class="hidden">
+    <div id="syncBanner" class="banner"></div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <h2 style="margin:0">资产总览</h2><span id="count" class="mute"></span>
+      </div>
+      <div id="epChips" class="row"></div>
+      <div id="statusLine" class="mute" style="margin-top:8px"></div>
+      <div class="row" style="margin-top:8px"><button id="auditBtn"></button></div>
+      <div id="auditList" class="hidden" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card row">
+      <input id="q" placeholder="搜索 邮箱 / 服务 / 端 / 备注" style="flex:1;min-width:200px">
+      <button id="addBtn" class="pri">新增</button>
+      <button id="bulkBtn">批量粘贴</button>
+      <select id="moreSel" style="width:auto">
+        <option value="">更多…</option>
+        <option value="export">导出加密备份</option>
+        <option value="importv">导入备份（合并）</option>
+        <option value="csv">导入 CSV</option>
+        <option value="csvout">导出明文 CSV</option>
+        <option value="print">打印应急纸卡</option>
+        <option value="settings">同步与设备设置</option>
+      </select>
+      <button id="lockBtn">锁定</button>
+    </div>
+
+    <div id="bulkCard" class="card hidden">
+      <h2>批量粘贴</h2>
+      <p class="mute">一行一个。支持购号常见格式 <code>邮箱----密码----辅助邮箱</code>，也支持用 Tab、|、空格、逗号分隔。能识别出邮箱、密码、辅助邮箱、手机号、2FA 密钥，其余放进备注。已存在的邮箱自动跳过。</p>
+      <textarea id="bulkText" style="min-height:120px"></textarea>
+      <div class="row" style="margin-top:8px">
+        <div style="width:160px"><label>归属端</label><select id="bulkEp"></select></div>
+        <div style="flex:1;min-width:160px"><label>绑定服务（可留空）</label><input id="bulkSvc" list="svcList"></div>
+      </div>
+      <div class="row" style="margin-top:10px"><button id="bulkGo" class="pri">导入</button><button id="bulkCancel">取消</button><span id="bulkPreview" class="mute"></span></div>
+    </div>
+
+    <div id="settingsCard" class="card hidden">
+      <h2>同步与设备设置</h2>
+      <div class="grid">
+        <div><label>GitHub 仓库</label><input id="s_repo"></div>
+        <div><label>文件路径</label><input id="s_path"></div>
+        <div><label>分支</label><input id="s_branch"></div>
+        <div><label>访问令牌（留空表示不改）</label><input id="s_token" type="password" autocomplete="off"></div>
+        <div><label>设备名</label><input id="s_device"></div>
+      </div>
+      <div style="margin-top:10px"><label>项目新增的端或设备（一行一个：代号=名称，如 E=E · 新端）。存进保险库，所有设备同步可见</label><textarea id="s_eps"></textarea></div>
+      <div class="row" style="margin-top:10px">
+        <button id="s_save" class="pri">保存</button><button id="s_sync">立即同步</button>
+        <a id="s_hist" target="_blank" rel="noopener" class="mute">查看历史版本</a>
+        <button id="s_off" class="danger">本设备断开全局同步</button>
+        <button id="s_close">关闭</button>
+      </div>
+      <p class="mute">令牌加密后存在本设备，只有解锁后才能读到。每次保存都是仓库里的一个版本，误删可以从历史版本找回。</p>
+    </div>
+
+    <div id="editCard" class="card hidden">
+      <div class="grid">
+        <div><label>邮箱地址 *</label><input id="f_email"></div>
+        <div><label>服务商</label><input id="f_provider" placeholder="自动识别"></div>
+        <div><label>密码</label>
+          <div class="row" style="flex-wrap:nowrap"><input id="f_password" type="password"><button id="genBtn">生成</button><button id="eyeBtn">显示</button></div></div>
+        <div><label>辅助邮箱</label><input id="f_recovery"></div>
+        <div><label>绑定手机</label><input id="f_phone"></div>
+        <div><label>2FA 密钥（Base32）</label><input id="f_totp"></div>
+        <div><label>归属端</label><select id="f_endpoint"></select></div>
+        <div><label>绑定服务（逗号分隔）</label><input id="f_services" list="svcList" placeholder="Claude, ChatGPT, GitHub"></div>
+        <div><label>状态</label><select id="f_status"></select></div>
+        <div><label>费用 / 权益（如 Claude Pro 20$/月）</label><input id="f_cost"></div>
+        <div><label>下次续费日</label><input id="f_renew" type="date"></div>
+      </div>
+      <div style="margin-top:10px"><label>备注（来源渠道、密保问题、注册日期等）</label><textarea id="f_notes"></textarea></div>
+      <div class="row" style="margin-top:12px">
+        <button id="saveBtn" class="pri">保存</button><button id="cancelBtn">取消</button><button id="delBtn" class="danger">删除</button>
+        <span id="f_info" class="mute"></span>
+      </div>
+    </div>
+
+    <div class="card"><div id="list"></div></div>
+    <p class="mute">闲置 5 分钟或切到后台 1 分钟自动锁定；复制的内容 30 秒后清空。</p>
+  </div>
+</div>
+<datalist id="svcList"><option>Claude</option><option>ChatGPT / Codex</option><option>Cursor</option><option>GitHub</option><option>Google</option><option>Apple ID</option><option>Tailscale</option><option>ToDesk</option><option>券商 / A股数据</option><option>内容平台</option></datalist>
+<div id="printArea"></div>
+<div id="toast"></div>
+<input id="fileIn" type="file" class="hidden">
+
+<script id="core">
+// ---- 核心：加密、TOTP、解析、合并、体检、GitHub 同步（无界面依赖，可在 Node 中测试） ----
+const ITER = 600000;
+const enc = new TextEncoder(), dec = new TextDecoder();
+const b64 = u => btoa(String.fromCharCode(...new Uint8Array(u)));
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const uuid = () => crypto.randomUUID ? crypto.randomUUID()
+  : Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
+
+async function deriveKey(password, salt, iter) {
+  const base = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({ name: "PBKDF2", hash: "SHA-256", salt, iterations: iter },
+    base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+}
+async function sealVault(data, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(password, salt, ITER);
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(JSON.stringify(data)));
+  return { app: "mail-vault", v: 1, kdf: "PBKDF2-SHA256", iter: ITER, salt: b64(salt), iv: b64(iv), ct: b64(ct) };
+}
+async function openVault(blob, password) {
+  if (!blob || blob.app !== "mail-vault") throw new Error("不是保险库文件");
+  const key = await deriveKey(password, unb64(blob.salt), blob.iter);
+  try {
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(blob.iv) }, key, unb64(blob.ct));
+    return JSON.parse(dec.decode(pt));
+  } catch { throw new Error("主密码不对"); }
+}
+
+function base32Decode(s) {
+  const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  s = s.toUpperCase().replace(/[\s=-]/g, "");
+  let bits = 0, val = 0; const out = [];
+  for (const c of s) {
+    const i = A.indexOf(c); if (i < 0) throw new Error("2FA 密钥格式不对");
+    val = (val << 5) | i; bits += 5;
+    if (bits >= 8) { out.push((val >>> (bits - 8)) & 255); bits -= 8; }
+  }
+  return new Uint8Array(out);
+}
+async function totp(secret, t = Date.now(), step = 30, digits = 6, rawKey) {
+  const keyBytes = rawKey || base32Decode(secret);
+  const ctr = Math.floor(t / 1000 / step), msg = new Uint8Array(8);
+  new DataView(msg.buffer).setUint32(0, Math.floor(ctr / 2 ** 32)); new DataView(msg.buffer).setUint32(4, ctr >>> 0);
+  const k = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+  const h = new Uint8Array(await crypto.subtle.sign("HMAC", k, msg)), o = h[19] & 15;
+  const n = ((h[o] & 127) << 24 | h[o + 1] << 16 | h[o + 2] << 8 | h[o + 3]) % 10 ** digits;
+  return String(n).padStart(digits, "0");
+}
+function genPassword(len = 18) {
+  const cs = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*-_";
+  return Array.from(crypto.getRandomValues(new Uint32Array(len)), x => cs[x % cs.length]).join("");
+}
+
+// 默认只放端代号，端的全称在“设置”里填，加密存进保险库。项目扩大时在“设置”里加端，存进保险库随同步到所有设备，不改代码
+const DEFAULT_ENDPOINTS = [["JP", "JP"], ["A", "A"], ["B", "B"], ["C", "C"], ["D", "D"],
+  ["RTJ", "本人"], ["PHONE", "手机"]];
+function endpointsOf(d) {
+  const m = new Map(DEFAULT_ENDPOINTS);
+  for (const [k, n] of (d && d.meta && d.meta.endpoints) || []) if (k) m.set(k, n);
+  return [...m, ["", "未分配"]];
+}
+function parseEndpoints(text) {
+  return text.split(/\r?\n/).map(l => l.split(/[=＝]/).map(s => s.trim())).filter(([k, n]) => k && /^[\w-]{1,16}$/.test(k)).map(([k, n]) => [k, n || k]);
+}
+const STATUSES = ["正常", "待验证", "受限", "已封禁", "已停用"];
+const DEAD = new Set(["已封禁", "已停用"]);
+const PROVIDERS = {
+  "gmail.com": ["Gmail", "https://mail.google.com"], "googlemail.com": ["Gmail", "https://mail.google.com"],
+  "outlook.com": ["Outlook", "https://outlook.live.com"], "hotmail.com": ["Outlook", "https://outlook.live.com"],
+  "live.com": ["Outlook", "https://outlook.live.com"], "msn.com": ["Outlook", "https://outlook.live.com"],
+  "qq.com": ["QQ邮箱", "https://mail.qq.com"], "foxmail.com": ["QQ邮箱", "https://mail.qq.com"],
+  "163.com": ["网易163", "https://mail.163.com"], "126.com": ["网易126", "https://mail.126.com"],
+  "yeah.net": ["网易yeah", "https://mail.yeah.net"], "sina.com": ["新浪", "https://mail.sina.com.cn"],
+  "aliyun.com": ["阿里邮箱", "https://mail.aliyun.com"], "icloud.com": ["iCloud", "https://www.icloud.com/mail"],
+  "yahoo.com": ["Yahoo", "https://mail.yahoo.com"], "proton.me": ["Proton", "https://mail.proton.me"],
+  "protonmail.com": ["Proton", "https://mail.proton.me"], "yandex.com": ["Yandex", "https://mail.yandex.com"],
+};
+function providerOf(email) {
+  const d = (String(email).split("@")[1] || "").toLowerCase().trim();
+  return PROVIDERS[d] || [d, d ? "https://" + d : ""];
+}
+
+// CSV
+function parseCSV(text) {
+  const rows = []; let row = [], f = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === ",") { row.push(f); f = ""; }
+    else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(f); rows.push(row); row = []; f = ""; }
+    else f += c;
+  }
+  if (f || row.length) { row.push(f); rows.push(row); }
+  return rows.filter(r => r.some(x => x.trim()));
+}
+const FIELDS = ["email", "password", "provider", "recovery", "phone", "totp", "endpoint", "services", "status", "cost", "renew", "notes"];
+const HEAD_ALIAS = { "邮箱": "email", "邮箱地址": "email", "账号": "email", "密码": "password", "服务商": "provider",
+  "辅助邮箱": "recovery", "手机": "phone", "绑定手机": "phone", "2fa": "totp", "端": "endpoint", "归属端": "endpoint",
+  "服务": "services", "绑定服务": "services", "用途": "services", "状态": "status", "费用": "cost", "续费日": "renew", "备注": "notes" };
+function csvToEntries(text) {
+  const rows = parseCSV(text.replace(/^﻿/, "")); if (!rows.length) return [];
+  const head = rows[0].map(h => { h = h.trim().toLowerCase(); return HEAD_ALIAS[h] || (FIELDS.includes(h) ? h : null); });
+  if (!head.includes("email")) return parseBulk(text);
+  return rows.slice(1).map(r => {
+    const e = {}; head.forEach((k, i) => { if (k && r[i] != null && r[i].trim()) e[k] = r[i].trim(); });
+    return e;
+  }).filter(e => e.email && e.email.includes("@"));
+}
+const csvCell = s => /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+function entriesToCSV(list) {
+  return "﻿" + [FIELDS.join(","), ...list.map(e => FIELDS.map(k => csvCell(String(e[k] || ""))).join(","))].join("\r\n");
+}
+
+// 批量粘贴：购号格式 邮箱----密码----辅助邮箱，或 Tab / | / 空格 / 逗号分隔
+function parseBulk(text) {
+  const out = [];
+  for (const line of text.replace(/^﻿/, "").split(/\r?\n/)) {
+    const s = line.trim(); if (!s) continue;
+    const sep = s.includes("----") ? /-{4,}/ : s.includes("\t") ? /\t+/ : s.includes("|") ? /\s*\|\s*/ : /\s+/.test(s) ? /\s+/ : /\s*[,，]\s*/;
+    let tok = s.split(sep).map(x => x.trim()).filter(Boolean);
+    const ei = tok.findIndex(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)); if (ei < 0) continue;
+    // 密码列原样保留（可能含空格），之后的列再按空格细分
+    tok = [...tok.slice(0, ei + 2), ...tok.slice(ei + 2).flatMap(x => x.split(/\s+/))];
+    const e = { email: tok[ei] }, notes = [];
+    tok.forEach((x, i) => {
+      if (i === ei) return;
+      if (e.password === undefined && i === ei + 1) e.password = x;
+      else if (!e.recovery && x.includes("@")) e.recovery = x;
+      else if (!e.phone && /^\+?\d[\d-]{6,16}$/.test(x)) e.phone = x;
+      else if (!e.totp && /^[A-Z2-7]{16,}=*$/i.test(x.replace(/\s/g, ""))) e.totp = x.replace(/\s/g, "").toUpperCase();
+      else notes.push(x);
+    });
+    if (notes.length) e.notes = notes.join(" ");
+    out.push(e);
+  }
+  return out;
+}
+
+// 合并：按 id，较新的 updatedAt 胜出；删除留墓碑 90 天，避免别的设备把已删记录同步回来
+const live = d => (d.entries || []).filter(e => !e.deletedAt);
+function mergeVaults(a, b, now = Date.now()) {
+  const m = new Map();
+  for (const e of [...(a.entries || []), ...(b.entries || [])]) {
+    const o = m.get(e.id);
+    if (!o || (e.updatedAt || "") > (o.updatedAt || "")) m.set(e.id, e);
+  }
+  const cut = new Date(now - 90 * 864e5).toISOString();
+  const entries = [...m.values()].filter(e => !e.deletedAt || e.deletedAt > cut).sort((x, y) => x.id < y.id ? -1 : 1);
+  const meta = { ...(b.meta || {}), ...(a.meta || {}) };
+  meta.lastExport = [a.meta && a.meta.lastExport, b.meta && b.meta.lastExport].filter(Boolean).sort().pop();
+  const eps = new Map([...((b.meta && b.meta.endpoints) || []), ...((a.meta && a.meta.endpoints) || [])]);
+  meta.endpoints = [...eps].sort((x, y) => x[0] < y[0] ? -1 : 1);
+  return { entries, meta };
+}
+const canon = d => { const m = mergeVaults(d, {}); return JSON.stringify([m.entries, m.meta.endpoints]); };
+const sameEntries = (a, b) => canon(a) === canon(b);
+
+// 体检：常规密码问题 + 项目特有的“扛得住”检查（找回链、单点手机、续费、封禁）
+function audit(d, now = Date.now()) {
+  const L = live(d), out = [], add = (lv, text, ids) => out.push({ lv, text, ids });
+  const low = s => String(s || "").trim().toLowerCase();
+  const byEmail = new Map(); L.forEach(e => { const k = low(e.email); byEmail.set(k, [...(byEmail.get(k) || []), e]); });
+  for (const [k, g] of byEmail) if (g.length > 1) add("warn", `${k} 重复记了 ${g.length} 条`, g.map(e => e.id));
+  const byPw = new Map(); L.forEach(e => { if (e.password) byPw.set(e.password, [...(byPw.get(e.password) || []), e]); });
+  for (const g of byPw.values()) if (g.length > 1) add("warn", `${g.length} 个邮箱共用同一个密码：${g.map(e => e.email).join("、")}`, g.map(e => e.id));
+  const byPhone = new Map(); L.forEach(e => { const p = String(e.phone || "").replace(/\D/g, ""); if (p) byPhone.set(p, [...(byPhone.get(p) || []), e]); });
+  for (const [p, g] of byPhone) if (g.length >= 3) add("info", `手机 …${p.slice(-4)} 绑了 ${g.length} 个邮箱：这张卡丢了会同时影响它们`, g.map(e => e.id));
+  const seenPair = new Set();
+  for (const e of L) {
+    if (DEAD.has(e.status)) continue;
+    if (!e.password) add("info", `${e.email} 没记密码`, [e.id]);
+    else if (e.password.length < 10) add("warn", `${e.email} 密码少于 10 位`, [e.id]);
+    if (e.services && !e.totp) add("info", `${e.email} 绑了 ${e.services}，但没有记 2FA`, [e.id]);
+    if (e.recovery) {
+      const r = (byEmail.get(low(e.recovery)) || [])[0];
+      if (!r) add("info", `${e.email} 的辅助邮箱 ${e.recovery} 不在保险库里，找回链断在库外`, [e.id]);
+      else if (DEAD.has(r.status)) add("warn", `${e.email} 的辅助邮箱 ${r.email} ${r.status}，找回链已断`, [e.id, r.id]);
+      else if (low(r.recovery) === low(e.email)) {
+        const key = [low(e.email), low(r.email)].sort().join("|");
+        if (!seenPair.has(key)) { seenPair.add(key); add("warn", `${e.email} 和 ${r.email} 互为辅助邮箱，丢一个可能两个都找不回`, [e.id, r.id]); }
+      }
+    }
+    if (e.renew) {
+      const days = Math.floor((new Date(e.renew + "T00:00:00").getTime() - now) / 864e5);
+      if (days < 0) add("warn", `${e.email}（${e.cost || e.services || "付费权益"}）续费日已过 ${-days} 天`, [e.id]);
+      else if (days <= 14) add("info", `${e.email}（${e.cost || e.services || "付费权益"}）${days} 天后续费`, [e.id]);
+    }
+  }
+  return out;
+}
+
+// GitHub 仓库同步：Contents API，sha 冲突时重新拉取、合并、再写
+const ghUrl = c => `https://api.github.com/repos/${c.repo}/contents/${c.path.split("/").map(encodeURIComponent).join("/")}`;
+const ghH = c => ({ Authorization: "Bearer " + c.token, Accept: "application/vnd.github+json" });
+async function ghGet(c, f) {
+  const r = await f(ghUrl(c) + "?ref=" + encodeURIComponent(c.branch || "main"), { headers: ghH(c), cache: "no-store" });
+  if (r.status === 404) return null;
+  if (r.status === 401 || r.status === 403) throw new Error("令牌无效或没有这个仓库的权限");
+  if (!r.ok) throw new Error("读取项目保险库失败（" + r.status + "）");
+  const j = await r.json();
+  return { sha: j.sha, blob: JSON.parse(atob(j.content.replace(/\s/g, ""))) };
+}
+async function ghPut(c, blob, sha, msg, f) {
+  const body = { message: msg, content: btoa(JSON.stringify(blob)), branch: c.branch || "main" };
+  if (sha) body.sha = sha;
+  const r = await f(ghUrl(c), { method: "PUT", headers: { ...ghH(c), "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (r.status === 409 || r.status === 422) return false;
+  if (r.status === 401 || r.status === 403) throw new Error("令牌没有写入权限");
+  if (!r.ok) throw new Error("写入项目保险库失败（" + r.status + "）");
+  return true;
+}
+async function syncVault(local, pw, c, device, f = fetch) {
+  for (let i = 0; i < 4; i++) {
+    const rem = await ghGet(c, f);
+    let merged = local;
+    if (rem) {
+      let rd;
+      try { rd = await openVault(rem.blob, pw); } catch { throw new Error("项目保险库的主密码和本设备不同"); }
+      merged = mergeVaults(local, rd);
+      if (sameEntries(merged, rd)) return { data: merged, pushed: false };
+    }
+    if (await ghPut(c, await sealVault(merged, pw), rem && rem.sha, `mail-vault: ${device || "设备"} ${new Date().toISOString()}`, f))
+      return { data: merged, pushed: true };
+  }
+  throw new Error("同步时多台设备同时在改，稍后自动重试");
+}
+if (typeof module !== "undefined") module.exports = { sealVault, openVault, totp, base32Decode, genPassword, providerOf,
+  csvToEntries, entriesToCSV, parseBulk, mergeVaults, sameEntries, audit, syncVault, live, endpointsOf, parseEndpoints };
+</script>
+
+<script>
+// ---- 界面 ----
+const $ = id => document.getElementById(id);
+const STORE = "mailVault.v1", CFG = "mailVault.cfg", DEV = "mailVault.device";
+let pw = null, data = null, cfg = null, editId = null, filterEp = null, issues = [];
+let idleTimer = null, totpTimer = null, syncTimer = null, pollTimer = null, syncing = false, hiddenAt = 0, lastCopy = null;
+
+const ls = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); return true; } catch { return false; } }, del(k) { try { localStorage.removeItem(k); } catch {} } };
+const readJSON = k => { try { return JSON.parse(ls.get(k)); } catch { return null; } };
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const epName = k => (endpointsOf(data).find(x => x[0] === (k || "")) || [, k])[1];
+const nowISO = () => new Date().toISOString();
+const device = () => ls.get(DEV) || "未命名设备";
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("on"), 2200); }
+
+$("f_status").innerHTML = STATUSES.map(s => `<option>${s}</option>`).join("");
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+
+// --- 锁定 / 解锁 ---
+function showLock() {
+  pw = null; data = null; cfg = null; [totpTimer, pollTimer].forEach(clearInterval); clearTimeout(syncTimer);
+  $("mainView").classList.add("hidden"); $("lockView").classList.remove("hidden"); $("editCard").classList.add("hidden");
+  const has = !!readJSON(STORE);
+  $("master2Box").classList.toggle("hidden", has);
+  $("unlockBtn").textContent = has ? "解锁" : "只在本设备新建";
+  $("connectBox").open = !has;
+  $("lockHint").textContent = has ? `本设备：${device()}` : "这台设备上还没有保险库。项目里已有保险库的话，展开下面“接入项目全局保险库”。";
+  $("master").value = $("master2").value = ""; $("master").focus();
+}
+async function enter(d, m, c) {
+  pw = m; data = mergeVaults(d, {}); data.meta = d.meta || {}; cfg = c;
+  await saveLocal();
+  $("lockView").classList.add("hidden"); $("mainView").classList.remove("hidden");
+  render(); bumpIdle();
+  clearInterval(pollTimer); pollTimer = setInterval(() => { if (!document.hidden) doSync(); }, 60000);
+  if (cfg) doSync(); else setBanner();
+}
+async function unlock(blob) {
+  const m = $("master").value; if (!m) return toast("请输入主密码");
+  try {
+    if (blob) {
+      const d = await openVault(blob, m);
+      const st = readJSON(STORE);
+      return enter(st ? mergeVaults(await openVault(st, m), d) : d, m, await loadCfg(m));
+    }
+    const st = readJSON(STORE);
+    if (st) return enter(await openVault(st, m), m, await loadCfg(m));
+    if (m !== $("master2").value) return toast("两次主密码不一致");
+    enter({ entries: [], meta: { created: nowISO() } }, m, null);
+  } catch (e) { toast(e.message); }
+}
+async function loadCfg(m) { const b = readJSON(CFG); if (!b) return null; try { return await openVault(b, m); } catch { return null; } }
+async function saveCfg() { if (cfg) ls.set(CFG, JSON.stringify(await sealVault(cfg, pw))); else ls.del(CFG); }
+
+$("connectBtn").onclick = async () => {
+  const m = $("master").value; if (!m) return toast("请先输入主密码");
+  const c = { repo: $("c_repo").value.trim(), path: $("c_path").value.trim() || "mail-vault/vault.json", branch: $("c_branch").value.trim() || "main", token: $("c_token").value.trim() };
+  if (!/^[\w.-]+\/[\w.-]+$/.test(c.repo) || !c.token) return toast("请填仓库（所有者/仓库名）和令牌");
+  if ($("c_device").value.trim()) ls.set(DEV, $("c_device").value.trim());
+  toast("连接中…");
+  try {
+    const rem = await ghGet(c, fetch.bind(window));
+    let d;
+    if (rem) d = await openVault(rem.blob, m).catch(() => { throw new Error("主密码和项目保险库不一致"); });
+    else {
+      if ($("master2Box").classList.contains("hidden") || m !== $("master2").value) {
+        $("master2Box").classList.remove("hidden"); return toast("远端还没有保险库：再输一次主密码，确认新建");
+      }
+      d = { entries: [], meta: { created: nowISO() } };
+    }
+    const st = readJSON(STORE);
+    if (st) { try { d = mergeVaults(await openVault(st, m), d); } catch { if (!confirm("本设备原有的保险库用的是另一个主密码，无法合并。丢弃本设备旧数据，改用项目保险库？")) return; } }
+    pw = m; cfg = c; await saveCfg();
+    enter(d, m, c);
+  } catch (e) { toast(e.message); }
+};
+
+function bumpIdle() { clearTimeout(idleTimer); if (pw) idleTimer = setTimeout(() => { showLock(); toast("已自动锁定"); }, 5 * 60 * 1000); }
+["click", "keydown", "touchstart"].forEach(ev => document.addEventListener(ev, bumpIdle, { passive: true }));
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) hiddenAt = Date.now();
+  else if (pw && hiddenAt && Date.now() - hiddenAt > 60000) { showLock(); toast("切到后台超过 1 分钟，已锁定"); }
+  else if (pw) doSync();
+});
+
+// --- 保存与同步 ---
+async function saveLocal() {
+  data.updated = nowISO();
+  if (!ls.set(STORE, JSON.stringify(await sealVault(data, pw)))) toast("本设备存储不可用，请导出备份");
+}
+async function persist() { await saveLocal(); render(); if (cfg) { clearTimeout(syncTimer); syncTimer = setTimeout(doSync, 1500); } else setBanner(); }
+async function doSync() {
+  if (!cfg || !pw || syncing) return;
+  syncing = true; setBanner("同步中…");
+  try {
+    const r = await syncVault(data, pw, cfg, device(), fetch.bind(window));
+    const merged = mergeVaults(data, r.data);
+    const changed = !sameEntries(merged, data);
+    data = merged; if (changed) { await saveLocal(); render(); }
+    ls.set("mailVault.lastSync", nowISO());
+    if (!sameEntries(merged, r.data)) { clearTimeout(syncTimer); syncTimer = setTimeout(doSync, 1500); }
+    setBanner();
+  } catch (e) { setBanner("⚠ " + e.message + "。本设备已保存，联网后自动补同步。", true); }
+  finally { syncing = false; }
+}
+function setBanner(msg, bad) {
+  const b = $("syncBanner");
+  if (msg) { b.className = "banner" + (bad ? " warn" : ""); b.textContent = msg; return; }
+  if (!cfg) {
+    b.className = "banner warn";
+    b.innerHTML = "这是<b>本设备</b>保险库，还没接入项目全局：换设备、清浏览器数据都会丢。请在“更多 → 同步与设备设置”里接入。";
+    return;
+  }
+  const t = ls.get("mailVault.lastSync");
+  b.className = "banner ok";
+  b.textContent = `项目全局 · ${cfg.repo} · 本设备“${device()}” · 已同步 ${t ? new Date(t).toLocaleString() : "—"}`;
+}
+
+// --- 剪贴板 ---
+async function copy(text, what) {
+  if (!text) return toast("没有" + what);
+  try { await navigator.clipboard.writeText(text); } catch { return toast("复制失败"); }
+  lastCopy = text; toast("已复制" + what + "，30 秒后清空");
+  setTimeout(() => { if (lastCopy === text) { navigator.clipboard.writeText("").catch(() => {}); lastCopy = null; } }, 30000);
+}
+
+// --- 渲染 ---
+function render() {
+  const L = live(data), ENDPOINTS = endpointsOf(data);
+  const opts = ENDPOINTS.map(([k, n]) => `<option value="${esc(k)}">${esc(n)}</option>`).join("");
+  for (const id of ["f_endpoint", "bulkEp"]) { const s = $(id), v = s.value; s.innerHTML = opts; s.value = v; }
+  issues = audit(data);
+  const flagged = new Set(issues.filter(i => i.lv === "warn").flatMap(i => i.ids));
+  const epCount = {}; L.forEach(e => epCount[e.endpoint || ""] = (epCount[e.endpoint || ""] || 0) + 1);
+  $("epChips").innerHTML = `<button class="chip ${filterEp === null ? "on" : ""}" data-ep="*">全部 ${L.length}</button>` +
+    ENDPOINTS.filter(([k]) => epCount[k]).map(([k, n]) => `<button class="chip ${filterEp === k ? "on" : ""}" data-ep="${k}">${esc(n)} ${epCount[k]}</button>`).join("");
+  const st = {}; L.forEach(e => st[e.status || "正常"] = (st[e.status || "正常"] || 0) + 1);
+  $("statusLine").textContent = STATUSES.filter(s => st[s]).map(s => `${s} ${st[s]}`).join(" · ") || "还没有记录";
+  const w = issues.filter(i => i.lv === "warn").length;
+  $("auditBtn").textContent = issues.length ? `体检：${w} 项要处理，${issues.length - w} 项提醒` : "体检：没有问题";
+  $("auditList").innerHTML = issues.map(i => `<div class="issue ${i.lv}">${esc(i.text)}</div>`).join("");
+
+  const q = $("q").value.trim().toLowerCase();
+  const list = L.filter(e => filterEp === null || (e.endpoint || "") === filterEp)
+    .filter(e => !q || [e.email, e.provider, e.services, epName(e.endpoint), e.notes, e.status, e.recovery, e.phone, e.cost].join(" ").toLowerCase().includes(q))
+    .sort((a, b) => (a.endpoint || "~").localeCompare(b.endpoint || "~") || String(a.email).localeCompare(b.email));
+  $("count").textContent = `共 ${L.length} 个邮箱` + (list.length !== L.length ? `，显示 ${list.length} 个` : "");
+  const usedAsRecovery = {}; L.forEach(e => { if (e.recovery) { const k = e.recovery.toLowerCase(); usedAsRecovery[k] = (usedAsRecovery[k] || 0) + 1; } });
+  $("list").innerHTML = list.length ? list.map(e => `
+    <div class="entry ${flagged.has(e.id) ? "flag" : ""}" data-id="${e.id}">
+      <div>
+        <div class="addr">${esc(e.email)}</div>
+        <div class="meta"><span class="tag">${esc(e.provider || "未知")}</span>${e.endpoint ? `<span class="tag">${esc(epName(e.endpoint))}</span>` : ""}${e.status && e.status !== "正常" ? `<span class="tag ${DEAD.has(e.status) ? "bad" : ""}">${esc(e.status)}</span>` : ""}${e.services ? esc(e.services) : ""}</div>
+        ${e.recovery || e.phone ? `<div class="meta">找回：${esc(e.recovery)} ${esc(e.phone)}</div>` : ""}
+        ${usedAsRecovery[e.email.toLowerCase()] ? `<div class="meta">是 ${usedAsRecovery[e.email.toLowerCase()]} 个邮箱的辅助邮箱</div>` : ""}
+        ${e.cost || e.renew ? `<div class="meta">${esc(e.cost)} ${e.renew ? "续费日 " + esc(e.renew) : ""}</div>` : ""}
+        ${e.notes ? `<div class="meta">${esc(e.notes).replace(/\n/g, "<br>")}</div>` : ""}
+        ${e.totp ? `<div class="meta">2FA：<span class="totp" data-totp="${e.id}">······</span></div>` : ""}
+        <div class="meta">最后修改：${esc(e.updatedBy || "—")} ${e.updatedAt ? new Date(e.updatedAt).toLocaleString() : ""}</div>
+      </div>
+      <div class="acts">
+        <button data-a="user">复制邮箱</button><button data-a="pass">复制密码</button>
+        ${e.totp ? `<button data-a="code">复制验证码</button>` : ""}
+        <button data-a="open">打开邮箱</button><button data-a="edit">编辑</button>
+      </div>
+    </div>`).join("") : `<p class="mute">${L.length ? "没有匹配项" : "还没有记录。点“新增”，或“批量粘贴”把现有清单一次贴进来。"}</p>`;
+  refreshTotp(); clearInterval(totpTimer); totpTimer = setInterval(refreshTotp, 1000);
+}
+async function refreshTotp() {
+  for (const el of document.querySelectorAll("[data-totp]")) {
+    const e = data && data.entries.find(x => x.id === el.dataset.totp); if (!e) continue;
+    try { el.textContent = (await totp(e.totp)) + "  (" + (30 - Math.floor(Date.now() / 1000) % 30) + "s)"; } catch { el.textContent = "密钥无效"; }
+  }
+}
+$("epChips").onclick = ev => { const b = ev.target.closest("[data-ep]"); if (!b) return; filterEp = b.dataset.ep === "*" ? null : b.dataset.ep; render(); };
+$("auditBtn").onclick = () => $("auditList").classList.toggle("hidden");
+$("q").oninput = render;
+$("lockBtn").onclick = showLock;
+$("list").addEventListener("click", async ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  const e = data.entries.find(x => x.id === b.closest(".entry").dataset.id);
+  if (b.dataset.a === "user") copy(e.email, "邮箱");
+  if (b.dataset.a === "pass") copy(e.password, "密码");
+  if (b.dataset.a === "code") { try { copy(await totp(e.totp), "验证码"); } catch (er) { toast(er.message); } }
+  if (b.dataset.a === "open") { const u = providerOf(e.email)[1]; if (u) window.open(u, "_blank", "noopener"); }
+  if (b.dataset.a === "edit") openEdit(e);
+});
+
+// --- 编辑 ---
+const F = ["email", "provider", "password", "recovery", "phone", "totp", "endpoint", "services", "status", "cost", "renew", "notes"];
+function openEdit(e) {
+  editId = e ? e.id : null;
+  F.forEach(k => $("f_" + k).value = (e && e[k]) || (k === "status" ? "正常" : k === "endpoint" ? (filterEp || "") : ""));
+  $("f_password").type = "password"; $("eyeBtn").textContent = "显示";
+  $("delBtn").classList.toggle("hidden", !e);
+  $("f_info").textContent = e && e.pwChangedAt ? "密码更新于 " + new Date(e.pwChangedAt).toLocaleDateString() : "";
+  $("editCard").classList.remove("hidden"); $("f_email").focus(); window.scrollTo(0, 0);
+}
+$("addBtn").onclick = () => openEdit(null);
+$("cancelBtn").onclick = () => $("editCard").classList.add("hidden");
+$("genBtn").onclick = () => { $("f_password").value = genPassword(); $("f_password").type = "text"; $("eyeBtn").textContent = "隐藏"; };
+$("eyeBtn").onclick = () => { const p = $("f_password"); p.type = p.type === "password" ? "text" : "password"; $("eyeBtn").textContent = p.type === "password" ? "显示" : "隐藏"; };
+$("f_email").onblur = () => { if (!$("f_provider").value) $("f_provider").value = providerOf($("f_email").value)[0]; };
+$("saveBtn").onclick = async () => {
+  const v = {}; F.forEach(k => v[k] = $("f_" + k).value.trim());
+  if (!v.email.includes("@")) return toast("邮箱地址不完整");
+  if (v.totp) { try { base32Decode(v.totp); } catch (er) { return toast(er.message); } }
+  if (!v.provider) v.provider = providerOf(v.email)[0];
+  const stamp = { updatedAt: nowISO(), updatedBy: device() };
+  if (editId) {
+    const e = data.entries.find(x => x.id === editId);
+    if (e.password !== v.password) stamp.pwChangedAt = stamp.updatedAt;
+    Object.assign(e, v, stamp);
+  } else {
+    if (live(data).some(x => x.email.toLowerCase() === v.email.toLowerCase()) && !confirm("这个邮箱已存在，仍然新增一条？")) return;
+    data.entries.push({ id: uuid(), ...v, createdAt: stamp.updatedAt, pwChangedAt: stamp.updatedAt, ...stamp });
+  }
+  $("editCard").classList.add("hidden"); await persist(); toast("已保存");
+};
+$("delBtn").onclick = async () => {
+  if (!confirm("删除这条记录？删除会同步到所有设备，可从仓库历史版本找回。")) return;
+  const i = data.entries.findIndex(x => x.id === editId), t = nowISO();
+  data.entries[i] = { id: editId, deletedAt: t, updatedAt: t, updatedBy: device() };
+  $("editCard").classList.add("hidden"); await persist(); toast("已删除");
+};
+
+// --- 批量导入 ---
+function addMany(rows, extra = {}) {
+  const known = new Set(live(data).map(x => x.email.toLowerCase())); let n = 0, skip = 0;
+  const t = nowISO();
+  for (const r of rows) {
+    if (known.has(r.email.toLowerCase())) { skip++; continue; }
+    data.entries.push({ id: uuid(), provider: providerOf(r.email)[0], status: "正常", ...extra, ...r, createdAt: t, updatedAt: t, pwChangedAt: t, updatedBy: device() });
+    known.add(r.email.toLowerCase()); n++;
+  }
+  return `导入 ${n} 条` + (skip ? `，跳过已存在 ${skip} 条` : "");
+}
+$("bulkBtn").onclick = () => { $("bulkCard").classList.remove("hidden"); $("bulkEp").value = filterEp || ""; $("bulkText").focus(); };
+$("bulkCancel").onclick = () => { $("bulkCard").classList.add("hidden"); $("bulkText").value = ""; };
+$("bulkText").oninput = () => { const r = parseBulk($("bulkText").value); $("bulkPreview").textContent = r.length ? `识别到 ${r.length} 个邮箱` + (r.filter(x => x.password).length < r.length ? `，其中 ${r.length - r.filter(x => x.password).length} 个没有密码` : "") : ""; };
+$("bulkGo").onclick = async () => {
+  const rows = parseBulk($("bulkText").value); if (!rows.length) return toast("没有识别到邮箱");
+  const extra = {}; if ($("bulkEp").value) extra.endpoint = $("bulkEp").value; if ($("bulkSvc").value.trim()) extra.services = $("bulkSvc").value.trim();
+  const msg = addMany(rows, extra);
+  $("bulkText").value = ""; $("bulkPreview").textContent = ""; $("bulkCard").classList.add("hidden");
+  await persist(); toast(msg);
+};
+
+// --- 更多菜单 ---
+function download(name, text, type) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const fstamp = () => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+let fileMode = null;
+function pickFile(mode, accept) { fileMode = mode; $("fileIn").accept = accept; $("fileIn").value = ""; $("fileIn").click(); }
+$("moreSel").onchange = async () => {
+  const v = $("moreSel").value; $("moreSel").value = "";
+  if (v === "export") { data.meta.lastExport = nowISO(); await saveLocal(); download(`mail-vault-${fstamp()}.json`, JSON.stringify(await sealVault(data, pw)), "application/json"); toast("已导出加密备份（需主密码才能打开）"); }
+  if (v === "importv") pickFile("vault", ".json");
+  if (v === "csv") pickFile("csv", ".csv,.txt");
+  if (v === "csvout" && confirm("明文 CSV 不加密，任何人拿到都能看到密码。继续？")) download(`mail-vault-明文-${fstamp()}.csv`, entriesToCSV(live(data)), "text/csv");
+  if (v === "print") printSheet();
+  if (v === "settings") openSettings();
+};
+$("importVaultBtn").onclick = () => pickFile("vault", ".json");
+$("fileIn").onchange = async () => {
+  const f = $("fileIn").files[0]; if (!f) return; const text = await f.text();
+  if (fileMode === "vault") {
+    let blob; try { blob = JSON.parse(text); } catch { return toast("文件不是有效的备份"); }
+    if (!pw) return unlock(blob);
+    try { data = mergeVaults(data, await openVault(blob, pw)); await persist(); toast("备份已合并"); } catch (e) { toast(e.message === "主密码不对" ? "这个备份用的是另一个主密码" : e.message); }
+  } else {
+    const rows = csvToEntries(text); if (!rows.length) return toast("文件里没有识别到邮箱");
+    const msg = addMany(rows); await persist(); toast(msg);
+  }
+};
+
+// 应急纸卡：习惯把密码写在纸上的，直接打印一张
+function printSheet() {
+  const withPw = confirm("纸卡上要印出密码吗？\n确定 = 印密码（纸要收好）；取消 = 只印邮箱和找回信息");
+  const rows = live(data).sort((a, b) => (a.endpoint || "~").localeCompare(b.endpoint || "~") || a.email.localeCompare(b.email));
+  $("printArea").innerHTML = `<h2>邮箱资产应急纸卡</h2>
+    <p>打印于 ${new Date().toLocaleString()} · 共 ${rows.length} 个 · 主密码：______________________ · 项目保险库：${esc(cfg ? cfg.repo + " / " + cfg.path : "仅本设备")}</p>
+    <table><tr><th>端</th><th>邮箱</th>${withPw ? "<th>密码</th>" : ""}<th>辅助邮箱</th><th>手机</th><th>服务</th><th>状态</th></tr>
+    ${rows.map(e => `<tr><td>${esc(epName(e.endpoint))}</td><td>${esc(e.email)}</td>${withPw ? `<td>${esc(e.password)}</td>` : ""}<td>${esc(e.recovery)}</td><td>${esc(e.phone)}</td><td>${esc(e.services)}</td><td>${esc(e.status)}</td></tr>`).join("")}</table>`;
+  window.print();
+  setTimeout(() => { $("printArea").innerHTML = ""; }, 1000);
+}
+
+// --- 同步设置 ---
+function openSettings() {
+  const c = cfg || { repo: "", path: "mail-vault/vault.json", branch: "main" };
+  $("s_repo").value = c.repo; $("s_path").value = c.path; $("s_branch").value = c.branch; $("s_token").value = ""; $("s_device").value = ls.get(DEV) || "";
+  $("s_eps").value = (data.meta.endpoints || []).map(([k, n]) => `${k}=${n}`).join("\n");
+  $("s_hist").href = c.repo ? `https://github.com/${c.repo}/commits/${c.branch}/${c.path}` : "#";
+  $("s_off").classList.toggle("hidden", !cfg);
+  $("settingsCard").classList.remove("hidden");
+}
+$("s_close").onclick = () => $("settingsCard").classList.add("hidden");
+$("s_save").onclick = async () => {
+  if ($("s_device").value.trim()) ls.set(DEV, $("s_device").value.trim());
+  const repo = $("s_repo").value.trim(), token = $("s_token").value.trim() || (cfg && cfg.token);
+  if (repo) {
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !token) return toast("请填仓库（所有者/仓库名）和令牌");
+    cfg = { repo, path: $("s_path").value.trim() || "mail-vault/vault.json", branch: $("s_branch").value.trim() || "main", token };
+  }
+  const eps = parseEndpoints($("s_eps").value);
+  if (JSON.stringify(eps) !== JSON.stringify(data.meta.endpoints || [])) data.meta.endpoints = eps;
+  await saveCfg(); $("settingsCard").classList.add("hidden"); toast("已保存"); await persist();
+};
+$("s_sync").onclick = () => doSync();
+$("s_off").onclick = async () => { if (!confirm("本设备不再同步（数据保留在本设备）。继续？")) return; cfg = null; await saveCfg(); $("settingsCard").classList.add("hidden"); setBanner(); };
+
+if (!(window.crypto && crypto.subtle)) {
+  $("lockView").innerHTML = '<p style="color:var(--warn)">这个打开方式下浏览器关闭了加密功能，保险库不能用。请直接双击 index.html，或用 https 网址打开；微信/QQ 里请点右上角“在浏览器打开”。</p>';
+  throw new Error("insecure context");
+}
+$("unlockBtn").onclick = () => unlock();
+$("master").onkeydown = $("master2").onkeydown = e => { if (e.key === "Enter") unlock(); };
+showLock();
+</script>
+</body>
+</html>
